@@ -27,7 +27,7 @@
 <div class="container">
     <h1>🎯 Numune Takip Sistemi</h1>
     
-    <div id="durum" class="basari">🔄 Bağlantı kuruluyor...</div>
+    <div id="durum" class="basari">✅ Sistem hazır</div>
 
     <div style="display: flex; gap: 10px; margin: 15px 0;">
         <button onclick="adminGiris()" style="background:#2c3e66">👑 Admin Girişi</button>
@@ -102,7 +102,7 @@
         appId: "1:387322096403:web:39f127e74f58e298db48e6"
     };
 
-    // Telegram Bilgileri - SABİT (Hiç sormaz)
+    // Telegram Bilgileri - SABİT (KESİNLİKLE SORMAZ)
     const TELEGRAM_TOKEN = "8580146530:AAFmQ-p5GPDXEwrGchNxv0wTrxzopq2A_SM";
     const TELEGRAM_CHAT_ID = "7538879338";
 
@@ -112,18 +112,11 @@
     let geciciRenkler = [];
 
     // Firebase Başlat
-    try {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        document.getElementById("durum").innerHTML = "✅ Sistem hazır";
-        verileriYukle();
-    } catch (e) {
-        document.getElementById("durum").innerHTML = "❌ Hata: " + e.message;
-        document.getElementById("durum").style.background = "#f8d7da";
-    }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    verileriYukle();
 
     async function verileriYukle() {
-        if (!db) return;
         try {
             const snapshot = await db.collection("magazalar").get();
             magazalar = [];

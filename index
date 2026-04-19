@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numune Takip Sistemi</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 700px; margin: auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #333; margin-top: 0; }
+        input, select, textarea, button { width: 100%; margin: 8px 0; padding: 12px; border-radius: 8px; border: 1px solid #ddd; }
+        button { background: #007bff; color: white; font-weight: bold; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .magaza-card { background: #f8f9fa; margin: 10px 0; padding: 15px; border-radius: 10px; border-left: 4px solid #007bff; }
+        .urun-item { background: #fff; margin: 8px 0; padding: 10px; border-radius: 8px; }
+        .renk-etiket { display: inline-block; background: #007bff; color: white; padding: 3px 8px; margin: 2px; border-radius: 12px; font-size: 12px; cursor: pointer; }
+        .sil-btn { background: #dc3545; padding: 4px 8px; font-size: 12px; margin-left: 10px; width: auto; }
+        .basari { background: #d4edda; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #155724; }
+        .hata { background: #f8d7da; color: #721c24; }
+        hr { margin: 20px 0; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 Numune Takip Sistemi</h1>
+    
+    <div id="durum" class="basari">🔄 Bağlantı kuruluyor...</div>
+
+    <div style="display: flex; gap: 10px; margin: 15px 0;">
+        <button onclick="adminGiris()" style="background:#2c3e66">👑 Admin Girişi</button>
+        <button onclick="calisanGirisEkrani()" style="background:#28a745">🏪 Çalışan Girişi</button>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div id="adminPanel" style="display:none;">
+        <h2>👑 Admin Paneli</h2>
+        <button onclick="adminCikis()" style="background:#6c757d">Admin Çıkış</button>
+        
+        <h3>➕ Yeni Mağaza</h3>
+        <input type="text" id="magazaAdi" placeholder="Mağaza Adı">
+        <input type="text" id="magazaSifre" placeholder="Mağaza Şifresi">
+        <button onclick="magazaEkle()">Mağaza Ekle</button>
+
+        <hr>
+
+        <h3>📦 Ürün Ekle</h3>
+        <select id="magazaSelect"></select>
+        <input type="text" id="urunAdi" placeholder="Ürün Adı">
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="renkInput" placeholder="Renk (örn: Kırmızı)" style="flex:2">
+            <button onclick="renkEkle()" style="flex:1; background:#28a745">+ Renk Ekle</button>
+        </div>
+        <div id="renkListesiDiv" style="background:#f0f0f0; padding: 10px; border-radius: 8px; margin: 10px 0; min-height: 60px;"></div>
+        <button onclick="urunEkle()" style="background:#007bff">💾 Ürünü Kaydet</button>
+
+        <hr>
+
+        <h3>📋 Tüm Mağazalar</h3>
+        <div id="magazalarDiv"></div>
+    </div>
+
+    <!-- ÇALIŞAN GİRİŞ -->
+    <div id="girisPanel" style="display:none;">
+        <h2>🏪 Mağaza Girişi</h2>
+        <input type="text" id="girisAdi" placeholder="Mağaza Adı">
+        <input type="password" id="girisSifreInput" placeholder="Şifre">
+        <button onclick="calisanGiris()">Giriş Yap</button>
+        <button onclick="girisKapat()" style="background:#6c757d">Geri Dön</button>
+    </div>
+
+    <!-- ÇALIŞAN PANEL -->
+    <div id="calisanPanel" style="display:none;">
+        <h2 id="calisanMagazaIsmi"></h2>
+        <button onclick="calisanCikis()" style="background:#6c757d">Çıkış Yap</button>
+        
+        <label>Ürün Seç:</label>
+        <select id="urunSelect"></select>
+        
+        <label>Renk Seç:</label>
+        <select id="renkSelect"></select>
+        
+        <label>Müşteri Bilgileri:</label>
+        <input type="text" id="musteriAdi" placeholder="Alıcı Adı Soyadı">
+        <input type="tel" id="musteriTel" placeholder="Telefon Numarası">
+        <input type="number" id="fiyat" placeholder="Anlaşılan Fiyat (TL)">
+        <textarea id="notlar" rows="2" placeholder="Ek Not"></textarea>
+        <button onclick="gonder()">📨 Telegrama Gönder</button>
+    </div>
+</div>
+
+<script>
+    // Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyD014Zg2jNBN_4XMopOiRfBoyKsCYvX0Qg",
+        authDomain: "crea-7b308.firebaseapp.com",
+        projectId: "crea-7b308",
+        storageBucket: "crea-7b308.firebasestorage.app",
+        messagingSenderId: "387322096403",
+        appId: "1:387322096403:web:39f127e74f58e298db48e6"
+    };
+
+    // Telegram Bilgileriniz
+    const TELEGRAM_TOKEN = "8580146530:AAFmQ-p5GPDXEwrGchNxv0wTrxzopq2A_SM";
+    let TELEGRAM_CHAT_ID = localStorage.getItem("telegram_chat_id") || "";
+
+    let db;
+    let magazalar = [];
+    let aktifMagaza = null;
+    let geciciRenkler = [];
+
+    // Firebase Başlat
+    try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        document.getElementById("durum").innerHTML = "✅ Sistem hazır";
+        document.getElementById("durum").className = "basari";
+        verileriYukle();
+        
+        if (!TELEGRAM_CHAT_ID) {
+            let chatId = prompt("Telegram Chat ID'nizi girin:\n\nNasıl bulurum?\n1. Telegram'da @userinfobot'a git\n2. /start yaz\n3. Size verilen ID'yi buraya yaz");
+            if (chatId) {
+                TELEGRAM_CHAT_ID = chatId;
+                localStorage.setItem("telegram_chat_id", TELEGRAM_CHAT_ID);
+            }
+        }
+    } catch (e) {
+        document.getElementById("durum").innerHTML = "❌ Hata: " + e.message;
+        document.getElementById("durum").className = "hata";
+    }
+
+    async function verileriYukle() {
+        if (!db) return;
+        try {
+            const snapshot = await db.collection("magazalar").get();
+            magazalar = [];
+            snapshot.forEach(doc => {
+                magazalar.push({ id: doc.id, ...doc.data() });
+            });
+            magazalariGoster();
+            magazaSelectGuncelle();
+        } catch (e) {
+            console.error("Veri yükleme hatası:", e);
+        }
+    }
+
+    function magazalariGoster() {
+        let div = document.getElementById("magazalarDiv");
+        if (!div) return;
+        div.innerHTML = "";
+        if (magazalar.length === 0) {
+            div.innerHTML = "<em>Henüz mağaza yok.</em>";
+            return;
+        }
+        for (let magaza of magazalar) {
+            let urunHtml = "";
+            if (magaza.urunler && magaza.urunler.length > 0) {
+                for (let u of magaza.urunler) {
+                    urunHtml += `<div class="urun-item">📦 <strong>${u.adi}</strong> → ${u.renkler.join(", ")}</div>`;
+                }
+            } else {
+                urunHtml = "<em>Ürün yok</em>";
+            }
+            
+            div.innerHTML += `
+                <div class="magaza-card">
+                    <strong>🏪 ${magaza.adi}</strong> (Şifre: ${magaza.sifre})
+                    <button onclick="magazaSil('${magaza.id}')" class="sil-btn">Sil</button>
+                    <br><br>
+                    ${urunHtml}
+                </div>
+            `;
+        }
+    }
+
+    function magazaSelectGuncelle() {
+        let select = document.getElementById("magazaSelect");
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Mağaza seç --</option>';
+        for (let i = 0; i < magazalar.length; i++) {
+            select.innerHTML += `<option value="${i}">${magazalar[i].adi}</option>`;
+        }
+    }
+
+    async function magazaEkle() {
+        let adi = document.getElementById("magazaAdi").value.trim();
+        let sifre = document.getElementById("magazaSifre").value.trim();
+        
+        if (!adi || !sifre) {
+            alert("Mağaza adı ve şifre girin!");
+            return;
+        }
+        
+        try {
+            await db.collection("magazalar").add({ adi, sifre, urunler: [] });
+            document.getElementById("magazaAdi").value = "";
+            document.getElementById("magazaSifre").value = "";
+            await verileriYukle();
+            alert("✅ Mağaza eklendi!");
+        } catch (e) {
+            alert("❌ Hata: " + e.message);
+        }
+    }
+
+    async function magazaSil(id) {
+        if (confirm("Silmek istediğinize emin misiniz?")) {
+            try {
+                await db.collection("magazalar").doc(id).delete();
+                await verileriYukle();
+                alert("Silindi!");
+            } catch(e) { 
+                alert("Hata: " + e.message);
+            }
+        }
+    }
+
+    function renkEkle() {
+        let renk = document.getElementById("renkInput").value.trim();
+        if (!renk) { alert("Renk girin!"); return; }
+        if (geciciRenkler.includes(renk)) { alert("Bu renk zaten var!"); return; }
+        geciciRenkler.push(renk);
+        renkListesiniGoster();
+        document.getElementById("renkInput").value = "";
+    }
+
+    function renkListesiniGoster() {
+        let div = document.getElementById("renkListesiDiv");
+        if (!div) return;
+        if (geciciRenkler.length === 0) {
+            div.innerHTML = "<em>Renk ekleyin</em>";
+        } else {
+            div.innerHTML = "<strong>📝 Renkler:</strong><br>";
+            for (let renk of geciciRenkler) {
+                div.innerHTML += `<span class="renk-etiket" onclick="geciciRenkSil('${renk}')">${renk} ❌</span> `;
+            }
+        }
+    }
+
+    function geciciRenkSil(renk) {
+        geciciRenkler = geciciRenkler.filter(r => r !== renk);
+        renkListesiniGoster();
+    }
+
+    async function urunEkle() {
+        let magIdx = document.getElementById("magazaSelect").value;
+        let urunAdi = document.getElementById("urunAdi").value.trim();
+        
+        if (magIdx === "") { alert("Mağaza seçin!"); return; }
+        if (!urunAdi) { alert("Ürün adı girin!"); return; }
+        if (geciciRenkler.length === 0) { alert("Renk ekleyin!"); return; }
+        
+        let magaza = magazalar[parseInt(magIdx)];
+        let yeniUrun = { adi: urunAdi, renkler: [...geciciRenkler] };
+        let yeniUrunler = [...(magaza.urunler || []), yeniUrun];
+        
+        try {
+            await db.collection("magazalar").doc(magaza.id).update({ urunler: yeniUrunler });
+            document.getElementById("urunAdi").value = "";
+            geciciRenkler = [];
+            renkListesiniGoster();
+            await verileriYukle();
+            alert("✅ Ürün eklendi!");
+        } catch(e) { 
+            alert("❌ Hata: " + e.message);
+        }
+    }
+
+    function adminGiris() {
+        let sifre = prompt("Admin şifresi:");
+        if (sifre === "admin123") {
+            document.getElementById("adminPanel").style.display = "block";
+            document.getElementById("girisPanel").style.display = "none";
+            document.getElementById("calisanPanel").style.display = "none";
+            magazaSelectGuncelle();
+            geciciRenkler = [];
+            renkListesiniGoster();
+        } else { alert("Şifre yanlış!"); }
+    }
+
+    function adminCikis() {
+        document.getElementById("adminPanel").style.display = "none";
+    }
+
+    function calisanGirisEkrani() {
+        document.getElementById("adminPanel").style.display = "none";
+        document.getElementById("girisPanel").style.display = "block";
+        document.getElementById("calisanPanel").style.display = "none";
+    }
+
+    function girisKapat() {
+        document.getElementById("girisPanel").style.display = "none";
+    }
+
+    function calisanGiris() {
+        let ad = document.getElementById("girisAdi").value.trim();
+        let sifre = document.getElementById("girisSifreInput").value.trim();
+        let bulunan = magazalar.find(m => m.adi === ad && m.sifre === sifre);
+        
+        if (!bulunan) { alert("Hatalı giriş!"); return; }
+        
+        aktifMagaza = bulunan;
+        sessionStorage.setItem("aktifMagaza", JSON.stringify(aktifMagaza));
+        
+        document.getElementById("girisPanel").style.display = "none";
+        document.getElementById("calisanPanel").style.display = "block";
+        document.getElementById("calisanMagazaIsmi").innerHTML = `🏪 ${aktifMagaza.adi}`;
+        calisanUrunleriYukle();
+    }
+
+    function calisanCikis() {
+        sessionStorage.removeItem("aktifMagaza");
+        aktifMagaza = null;
+        document.getElementById("calisanPanel").style.display = "none";
+    }
+
+    function calisanUrunleriYukle() {
+        let urunSelect = document.getElementById("urunSelect");
+        urunSelect.innerHTML = '<option value="">Ürün seç</option>';
+        if (!aktifMagaza.urunler || aktifMagaza.urunler.length === 0) {
+            urunSelect.innerHTML = '<option value="">Ürün yok</option>';
+            return;
+        }
+        for (let i = 0; i < aktifMagaza.urunler.length; i++) {
+            urunSelect.innerHTML += `<option value="${i}">${aktifMagaza.urunler[i].adi}</option>`;
+        }
+        
+        urunSelect.onchange = function() {
+            let renkSelect = document.getElementById("renkSelect");
+            renkSelect.innerHTML = '<option value="">Renk seç</option>';
+            if (urunSelect.value !== "") {
+                for (let r of aktifMagaza.urunler[urunSelect.value].renkler) {
+                    renkSelect.innerHTML += `<option value="${r}">${r}</option>`;
+                }
+            }
+        };
+    }
+
+    async function gonder() {
+        let urunIdx = document.getElementById("urunSelect").value;
+        let renk = document.getElementById("renkSelect").value;
+        let musteriAd = document.getElementById("musteriAdi").value.trim();
+        let tel = document.getElementById("musteriTel").value.trim();
+        let fiyat = document.getElementById("fiyat").value;
+        let not = document.getElementById("notlar").value;
+        
+        if (!urunIdx || !renk || !musteriAd || !tel || !fiyat) {
+            alert("Tüm alanları doldurun!");
+            return;
+        }
+        
+        if (!TELEGRAM_CHAT_ID) {
+            let chatId = prompt("Telegram Chat ID'nizi girin:\n\n@userinfobot'a gidip /start yazın");
+            if (chatId) {
+                TELEGRAM_CHAT_ID = chatId;
+                localStorage.setItem("telegram_chat_id", TELEGRAM_CHAT_ID);
+            } else {
+                alert("Chat ID girmeden gönderemezsiniz!");
+                return;
+            }
+        }
+        
+        let urunAdi = aktifMagaza.urunler[urunIdx].adi;
+        let mesaj = `🔔 YENİ NUMUNE TALEBİ
+━━━━━━━━━━━━━━━━━━━
+🏪 Mağaza: ${aktifMagaza.adi}
+📦 Ürün: ${urunAdi}
+🎨 Renk: ${renk}
+👤 Alıcı: ${musteriAd}
+📞 Telefon: ${tel}
+💰 Fiyat: ${fiyat} TL
+📝 Not: ${not || "-"}
+━━━━━━━━━━━━━━━━━━━`;
+        
+        try {
+            const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: mesaj })
+            });
+            
+            const data = await response.json();
+            
+            if (data.ok) {
+                alert("✅ Gönderildi!");
+                document.getElementById("musteriAdi").value = "";
+                document.getElementById("musteriTel").value = "";
+                document.getElementById("fiyat").value = "";
+                document.getElementById("notlar").value = "";
+                document.getElementById("urunSelect").value = "";
+                document.getElementById("renkSelect").innerHTML = '<option value="">Renk seç</option>';
+            } else {
+                alert("❌ Hata: " + data.description);
+            }
+        } catch (error) {
+            alert("❌ Bağlantı hatası!");
+        }
+    }
+
+    let kayitli = sessionStorage.getItem("aktifMagaza");
+    if (kayitli) {
+        aktifMagaza = JSON.parse(kayitli);
+        document.getElementById("calisanPanel").style.display = "block";
+        document.getElementById("calisanMagazaIsmi").innerHTML = `🏪 ${aktifMagaza.adi}`;
+        calisanUrunleriYukle();
+    }
+</script>
+</body>
+</html>

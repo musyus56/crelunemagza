@@ -17,7 +17,6 @@
         .renk-etiket { display: inline-block; background: #007bff; color: white; padding: 3px 8px; margin: 2px; border-radius: 12px; font-size: 12px; cursor: pointer; }
         .sil-btn { background: #dc3545; padding: 4px 8px; font-size: 12px; margin-left: 10px; width: auto; }
         .basari { background: #d4edda; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #155724; }
-        .hata { background: #f8d7da; color: #721c24; }
         hr { margin: 20px 0; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -103,9 +102,9 @@
         appId: "1:387322096403:web:39f127e74f58e298db48e6"
     };
 
-    // Telegram Bilgileriniz
+    // Telegram Bilgileri - SABİT (Hiç sormaz)
     const TELEGRAM_TOKEN = "8580146530:AAFmQ-p5GPDXEwrGchNxv0wTrxzopq2A_SM";
-    let TELEGRAM_CHAT_ID = localStorage.getItem("telegram_chat_id") || "";
+    const TELEGRAM_CHAT_ID = "7538879338";
 
     let db;
     let magazalar = [];
@@ -117,19 +116,10 @@
         firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
         document.getElementById("durum").innerHTML = "✅ Sistem hazır";
-        document.getElementById("durum").className = "basari";
         verileriYukle();
-        
-        if (!TELEGRAM_CHAT_ID) {
-            let chatId = prompt("Telegram Chat ID'nizi girin:\n\nNasıl bulurum?\n1. Telegram'da @userinfobot'a git\n2. /start yaz\n3. Size verilen ID'yi buraya yaz");
-            if (chatId) {
-                TELEGRAM_CHAT_ID = chatId;
-                localStorage.setItem("telegram_chat_id", TELEGRAM_CHAT_ID);
-            }
-        }
     } catch (e) {
         document.getElementById("durum").innerHTML = "❌ Hata: " + e.message;
-        document.getElementById("durum").className = "hata";
+        document.getElementById("durum").style.background = "#f8d7da";
     }
 
     async function verileriYukle() {
@@ -351,17 +341,6 @@
             return;
         }
         
-        if (!TELEGRAM_CHAT_ID) {
-            let chatId = prompt("Telegram Chat ID'nizi girin:\n\n@userinfobot'a gidip /start yazın");
-            if (chatId) {
-                TELEGRAM_CHAT_ID = chatId;
-                localStorage.setItem("telegram_chat_id", TELEGRAM_CHAT_ID);
-            } else {
-                alert("Chat ID girmeden gönderemezsiniz!");
-                return;
-            }
-        }
-        
         let urunAdi = aktifMagaza.urunler[urunIdx].adi;
         let mesaj = `🔔 YENİ NUMUNE TALEBİ
 ━━━━━━━━━━━━━━━━━━━
@@ -384,7 +363,7 @@
             const data = await response.json();
             
             if (data.ok) {
-                alert("✅ Gönderildi!");
+                alert("✅ Telegrama gönderildi!");
                 document.getElementById("musteriAdi").value = "";
                 document.getElementById("musteriTel").value = "";
                 document.getElementById("fiyat").value = "";

@@ -14,14 +14,13 @@
         button:hover { background: #0056b3; }
         .magaza-card { background: #f8f9fa; margin: 10px 0; padding: 15px; border-radius: 10px; border-left: 4px solid #007bff; }
         .urun-item { background: #fff; margin: 8px 0; padding: 10px; border-radius: 8px; }
-        .renk-etiket { display: inline-block; background: #007bff; color: white; padding: 3px 8px; margin: 2px; border-radius: 12px; font-size: 12px; cursor: pointer; }
+        .renk-item { display: inline-flex; align-items: center; background: #007bff; color: white; padding: 3px 8px; margin: 3px; border-radius: 15px; font-size: 12px; gap: 5px; }
+        .renk-item button { background: none; border: none; color: white; cursor: pointer; font-size: 11px; padding: 0 3px; margin: 0; width: auto; }
+        .renk-item button:hover { opacity: 0.8; transform: none; }
         .sil-btn { background: #dc3545; padding: 4px 8px; font-size: 12px; margin-left: 10px; width: auto; }
         .duzenle-btn { background: #ffc107; color: #333; padding: 4px 8px; font-size: 12px; margin-left: 5px; width: auto; }
         .kaydet-btn { background: #28a745; padding: 4px 8px; font-size: 12px; margin-left: 5px; width: auto; }
         .basari { background: #d4edda; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #155724; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; }
-        .modal-content input { margin: 10px 0; }
         hr { margin: 20px 0; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -96,16 +95,6 @@
     </div>
 </div>
 
-<!-- Düzenleme Modal -->
-<div id="editModal" class="modal">
-    <div class="modal-content">
-        <h3 id="modalTitle">Düzenle</h3>
-        <input type="text" id="editInput" placeholder="Yeni değer">
-        <button onclick="saveEdit()">Kaydet</button>
-        <button onclick="closeModal()" style="background:#6c757d">İptal</button>
-    </div>
-</div>
-
 <script>
     // Firebase
     const firebaseConfig = {
@@ -125,7 +114,6 @@
     let magazalar = [];
     let aktifMagaza = null;
     let geciciRenkler = [];
-    let editContext = null; // { type, magazaId, urunIndex, renk }
 
     // Firebase Başlat
     firebase.initializeApp(firebaseConfig);
@@ -161,14 +149,18 @@
                     let u = magaza.urunler[uIdx];
                     let renkHtml = "";
                     for (let r of u.renkler) {
-                        renkHtml += `<span class="renk-etiket" onclick="renkDuzenle('${magaza.id}', ${uIdx}, '${r}')">${r} ✏️</span> `;
+                        renkHtml += `<span class="renk-item">
+                            ${r}
+                            <button onclick="renkDuzenle('${magaza.id}', ${uIdx}, '${r}')" title="Düzenle">✏️</button>
+                            <button onclick="renkSil('${magaza.id}', ${uIdx}, '${r}')" title="Sil">🗑</button>
+                        </span>`;
                     }
                     urunHtml += `<div class="urun-item">
                         <strong>📦 ${u.adi}</strong>
                         <button onclick="urunDuzenle('${magaza.id}', ${uIdx})" class="duzenle-btn">✏️ Ürün Düzenle</button>
                         <button onclick="urunSil('${magaza.id}', ${uIdx})" class="sil-btn">🗑 Sil</button>
                         <br>
-                        <span>🎨 Renkler: </span>${renkHtml}
+                        <span>🎨 Renkler: </span>${renkHtml || "<em>Renk yok</em>"}
                         <button onclick="urunRenkEkle('${magaza.id}', ${uIdx})" class="duzenle-btn" style="background:#28a745">+ Renk Ekle</button>
                     </div>`;
                 }
@@ -317,7 +309,7 @@
         } else {
             div.innerHTML = "<strong>📝 Renkler:</strong><br>";
             for (let renk of geciciRenkler) {
-                div.innerHTML += `<span class="renk-etiket" onclick="geciciRenkSil('${renk}')">${renk} ❌</span> `;
+                div.innerHTML += `<span class="renk-item" style="background:#28a745">${renk} <button onclick="geciciRenkSil('${renk}')" style="background:none; color:white;">🗑</button></span> `;
             }
         }
     }
@@ -366,6 +358,23 @@
             await verileriYukle();
             alert("✅ Renk güncellendi!");
         } catch(e) { alert("Hata: " + e.message); }
+    }
+
+    async function renkSil(magazaId, urunIndex, renk) {
+        if (confirm(`"${renk}" rengini silmek istediğinize emin misiniz?`)) {
+            let magaza = magazalar.find(m => m.id === magazaId);
+            if (!magaza) return;
+            
+            let yeniUrunler = [...magaza.urunler];
+            let yeniRenkler = yeniUrunler[urunIndex].renkler.filter(r => r !== renk);
+            yeniUrunler[urunIndex].renkler = yeniRenkler;
+            
+            try {
+                await db.collection("magazalar").doc(magazaId).update({ urunler: yeniUrunler });
+                await verileriYukle();
+                alert("✅ Renk silindi!");
+            } catch(e) { alert("Hata: " + e.message); }
+        }
     }
 
     // ============ GİRİŞ İŞLEMLERİ (Büyük/Küçük Harf Duyarsız) ============

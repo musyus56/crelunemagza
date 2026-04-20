@@ -7,7 +7,7 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 700px; margin: auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1, h2, h3 { color: #333; margin-top: 0; }
         input, select, textarea, button { width: 100%; margin: 8px 0; padding: 12px; border-radius: 8px; border: 1px solid #ddd; }
         button { background: #007bff; color: white; font-weight: bold; border: none; cursor: pointer; }
@@ -16,7 +16,12 @@
         .urun-item { background: #fff; margin: 8px 0; padding: 10px; border-radius: 8px; }
         .renk-etiket { display: inline-block; background: #007bff; color: white; padding: 3px 8px; margin: 2px; border-radius: 12px; font-size: 12px; cursor: pointer; }
         .sil-btn { background: #dc3545; padding: 4px 8px; font-size: 12px; margin-left: 10px; width: auto; }
+        .duzenle-btn { background: #ffc107; color: #333; padding: 4px 8px; font-size: 12px; margin-left: 5px; width: auto; }
+        .kaydet-btn { background: #28a745; padding: 4px 8px; font-size: 12px; margin-left: 5px; width: auto; }
         .basari { background: #d4edda; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #155724; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; }
+        .modal-content input { margin: 10px 0; }
         hr { margin: 20px 0; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -91,6 +96,16 @@
     </div>
 </div>
 
+<!-- Düzenleme Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h3 id="modalTitle">Düzenle</h3>
+        <input type="text" id="editInput" placeholder="Yeni değer">
+        <button onclick="saveEdit()">Kaydet</button>
+        <button onclick="closeModal()" style="background:#6c757d">İptal</button>
+    </div>
+</div>
+
 <script>
     // Firebase
     const firebaseConfig = {
@@ -102,7 +117,7 @@
         appId: "1:387322096403:web:39f127e74f58e298db48e6"
     };
 
-    // Telegram Bilgileri - SABİT (KESİNLİKLE SORMAZ)
+    // Telegram Bilgileri - SABİT
     const TELEGRAM_TOKEN = "8580146530:AAFmQ-p5GPDXEwrGchNxv0wTrxzopq2A_SM";
     const TELEGRAM_CHAT_ID = "7538879338";
 
@@ -110,6 +125,7 @@
     let magazalar = [];
     let aktifMagaza = null;
     let geciciRenkler = [];
+    let editContext = null; // { type, magazaId, urunIndex, renk }
 
     // Firebase Başlat
     firebase.initializeApp(firebaseConfig);
@@ -141,8 +157,20 @@
         for (let magaza of magazalar) {
             let urunHtml = "";
             if (magaza.urunler && magaza.urunler.length > 0) {
-                for (let u of magaza.urunler) {
-                    urunHtml += `<div class="urun-item">📦 <strong>${u.adi}</strong> → ${u.renkler.join(", ")}</div>`;
+                for (let uIdx = 0; uIdx < magaza.urunler.length; uIdx++) {
+                    let u = magaza.urunler[uIdx];
+                    let renkHtml = "";
+                    for (let r of u.renkler) {
+                        renkHtml += `<span class="renk-etiket" onclick="renkDuzenle('${magaza.id}', ${uIdx}, '${r}')">${r} ✏️</span> `;
+                    }
+                    urunHtml += `<div class="urun-item">
+                        <strong>📦 ${u.adi}</strong>
+                        <button onclick="urunDuzenle('${magaza.id}', ${uIdx})" class="duzenle-btn">✏️ Ürün Düzenle</button>
+                        <button onclick="urunSil('${magaza.id}', ${uIdx})" class="sil-btn">🗑 Sil</button>
+                        <br>
+                        <span>🎨 Renkler: </span>${renkHtml}
+                        <button onclick="urunRenkEkle('${magaza.id}', ${uIdx})" class="duzenle-btn" style="background:#28a745">+ Renk Ekle</button>
+                    </div>`;
                 }
             } else {
                 urunHtml = "<em>Ürün yok</em>";
@@ -151,7 +179,8 @@
             div.innerHTML += `
                 <div class="magaza-card">
                     <strong>🏪 ${magaza.adi}</strong> (Şifre: ${magaza.sifre})
-                    <button onclick="magazaSil('${magaza.id}')" class="sil-btn">Sil</button>
+                    <button onclick="magazaDuzenle('${magaza.id}')" class="duzenle-btn">✏️ Düzenle</button>
+                    <button onclick="magazaSil('${magaza.id}')" class="sil-btn">🗑 Sil</button>
                     <br><br>
                     ${urunHtml}
                 </div>
@@ -168,6 +197,7 @@
         }
     }
 
+    // ============ MAĞAZA İŞLEMLERİ ============
     async function magazaEkle() {
         let adi = document.getElementById("magazaAdi").value.trim();
         let sifre = document.getElementById("magazaSifre").value.trim();
@@ -189,7 +219,7 @@
     }
 
     async function magazaSil(id) {
-        if (confirm("Silmek istediğinize emin misiniz?")) {
+        if (confirm("Bu mağazayı silmek istediğinize emin misiniz?")) {
             try {
                 await db.collection("magazalar").doc(id).delete();
                 await verileriYukle();
@@ -200,6 +230,76 @@
         }
     }
 
+    function magazaDuzenle(id) {
+        let magaza = magazalar.find(m => m.id === id);
+        if (!magaza) return;
+        
+        let yeniAd = prompt("Yeni mağaza adı:", magaza.adi);
+        let yeniSifre = prompt("Yeni mağaza şifresi:", magaza.sifre);
+        
+        if (yeniAd !== null && yeniSifre !== null) {
+            db.collection("magazalar").doc(id).update({ adi: yeniAd, sifre: yeniSifre })
+                .then(() => { verileriYukle(); alert("✅ Güncellendi!"); })
+                .catch(e => alert("Hata: " + e.message));
+        }
+    }
+
+    // ============ ÜRÜN İŞLEMLERİ ============
+    async function urunEkle() {
+        let magIdx = document.getElementById("magazaSelect").value;
+        let urunAdi = document.getElementById("urunAdi").value.trim();
+        
+        if (magIdx === "") { alert("Mağaza seçin!"); return; }
+        if (!urunAdi) { alert("Ürün adı girin!"); return; }
+        if (geciciRenkler.length === 0) { alert("Renk ekleyin!"); return; }
+        
+        let magaza = magazalar[parseInt(magIdx)];
+        let yeniUrun = { adi: urunAdi, renkler: [...geciciRenkler] };
+        let yeniUrunler = [...(magaza.urunler || []), yeniUrun];
+        
+        try {
+            await db.collection("magazalar").doc(magaza.id).update({ urunler: yeniUrunler });
+            document.getElementById("urunAdi").value = "";
+            geciciRenkler = [];
+            renkListesiniGoster();
+            await verileriYukle();
+            alert("✅ Ürün eklendi!");
+        } catch(e) { 
+            alert("❌ Hata: " + e.message);
+        }
+    }
+
+    async function urunSil(magazaId, urunIndex) {
+        if (confirm("Bu ürünü silmek istediğinize emin misiniz?")) {
+            let magaza = magazalar.find(m => m.id === magazaId);
+            if (magaza) {
+                let yeniUrunler = [...magaza.urunler];
+                yeniUrunler.splice(urunIndex, 1);
+                try {
+                    await db.collection("magazalar").doc(magazaId).update({ urunler: yeniUrunler });
+                    await verileriYukle();
+                    alert("Ürün silindi!");
+                } catch(e) { alert("Hata: " + e.message); }
+            }
+        }
+    }
+
+    function urunDuzenle(magazaId, urunIndex) {
+        let magaza = magazalar.find(m => m.id === magazaId);
+        if (!magaza) return;
+        let urun = magaza.urunler[urunIndex];
+        
+        let yeniAd = prompt("Yeni ürün adı:", urun.adi);
+        if (yeniAd !== null && yeniAd.trim() !== "") {
+            let yeniUrunler = [...magaza.urunler];
+            yeniUrunler[urunIndex].adi = yeniAd.trim();
+            db.collection("magazalar").doc(magazaId).update({ urunler: yeniUrunler })
+                .then(() => { verileriYukle(); alert("✅ Ürün adı güncellendi!"); })
+                .catch(e => alert("Hata: " + e.message));
+        }
+    }
+
+    // ============ RENK İŞLEMLERİ ============
     function renkEkle() {
         let renk = document.getElementById("renkInput").value.trim();
         if (!renk) { alert("Renk girin!"); return; }
@@ -227,30 +327,48 @@
         renkListesiniGoster();
     }
 
-    async function urunEkle() {
-        let magIdx = document.getElementById("magazaSelect").value;
-        let urunAdi = document.getElementById("urunAdi").value.trim();
+    async function urunRenkEkle(magazaId, urunIndex) {
+        let yeniRenk = prompt("Eklemek istediğiniz renk:");
+        if (!yeniRenk || yeniRenk.trim() === "") return;
         
-        if (magIdx === "") { alert("Mağaza seçin!"); return; }
-        if (!urunAdi) { alert("Ürün adı girin!"); return; }
-        if (geciciRenkler.length === 0) { alert("Renk ekleyin!"); return; }
+        let magaza = magazalar.find(m => m.id === magazaId);
+        if (!magaza) return;
         
-        let magaza = magazalar[parseInt(magIdx)];
-        let yeniUrun = { adi: urunAdi, renkler: [...geciciRenkler] };
-        let yeniUrunler = [...(magaza.urunler || []), yeniUrun];
+        let yeniUrunler = [...magaza.urunler];
+        if (yeniUrunler[urunIndex].renkler.includes(yeniRenk.trim())) {
+            alert("Bu renk zaten var!");
+            return;
+        }
+        yeniUrunler[urunIndex].renkler.push(yeniRenk.trim());
         
         try {
-            await db.collection("magazalar").doc(magaza.id).update({ urunler: yeniUrunler });
-            document.getElementById("urunAdi").value = "";
-            geciciRenkler = [];
-            renkListesiniGoster();
+            await db.collection("magazalar").doc(magazaId).update({ urunler: yeniUrunler });
             await verileriYukle();
-            alert("✅ Ürün eklendi!");
-        } catch(e) { 
-            alert("❌ Hata: " + e.message);
-        }
+            alert("✅ Renk eklendi!");
+        } catch(e) { alert("Hata: " + e.message); }
     }
 
+    async function renkDuzenle(magazaId, urunIndex, eskiRenk) {
+        let yeniRenk = prompt("Renk değiştir:", eskiRenk);
+        if (!yeniRenk || yeniRenk.trim() === "") return;
+        
+        let magaza = magazalar.find(m => m.id === magazaId);
+        if (!magaza) return;
+        
+        let yeniUrunler = [...magaza.urunler];
+        let renkIndex = yeniUrunler[urunIndex].renkler.indexOf(eskiRenk);
+        if (renkIndex !== -1) {
+            yeniUrunler[urunIndex].renkler[renkIndex] = yeniRenk.trim();
+        }
+        
+        try {
+            await db.collection("magazalar").doc(magazaId).update({ urunler: yeniUrunler });
+            await verileriYukle();
+            alert("✅ Renk güncellendi!");
+        } catch(e) { alert("Hata: " + e.message); }
+    }
+
+    // ============ GİRİŞ İŞLEMLERİ (Büyük/Küçük Harf Duyarsız) ============
     function adminGiris() {
         let sifre = prompt("Admin şifresi:");
         if (sifre === "admin123") {
@@ -280,16 +398,24 @@
     function calisanGiris() {
         let ad = document.getElementById("girisAdi").value.trim();
         let sifre = document.getElementById("girisSifreInput").value.trim();
-        let bulunan = magazalar.find(m => m.adi === ad && m.sifre === sifre);
         
-        if (!bulunan) { alert("Hatalı giriş!"); return; }
+        // Büyük/küçük harf duyarsız kontrol
+        let bulunan = magazalar.find(m => 
+            m.adi.toLowerCase() === ad.toLowerCase() && 
+            m.sifre === sifre
+        );
+        
+        if (!bulunan) { 
+            alert("Hatalı giriş! Mağaza adı veya şifre yanlış."); 
+            return; 
+        }
         
         aktifMagaza = bulunan;
         sessionStorage.setItem("aktifMagaza", JSON.stringify(aktifMagaza));
         
         document.getElementById("girisPanel").style.display = "none";
         document.getElementById("calisanPanel").style.display = "block";
-        document.getElementById("calisanMagazaIsmi").innerHTML = `🏪 ${aktifMagaza.adi}`;
+        document.getElementById("calisanMagazaIsmi").innerHTML = `🏪 ${bulunan.adi}`;
         calisanUrunleriYukle();
     }
 
@@ -321,6 +447,7 @@
         };
     }
 
+    // ============ TELEGRAM ============
     async function gonder() {
         let urunIdx = document.getElementById("urunSelect").value;
         let renk = document.getElementById("renkSelect").value;
